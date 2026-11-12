@@ -11,6 +11,7 @@ import com.servicehub.entity.User;
 import com.servicehub.entity.enums.Priority;
 import com.servicehub.entity.enums.RequestStatus;
 import com.servicehub.exception.BadRequestException;
+import com.servicehub.exception.ForbiddenOperationException;
 import com.servicehub.exception.ResourceNotFoundException;
 import com.servicehub.mapper.ServiceRequestMapper;
 import com.servicehub.repository.DepartmentRepository;
@@ -26,6 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -144,6 +146,27 @@ public class ServiceRequestService {
                 serviceRequestRepository.findAll(specification, pageable);
 
         return PageResponse.from(requests.map(ServiceRequestMapper::toResponse));
+    }
+
+    @Transactional(readOnly = true)
+    public ServiceRequestResponse getById(Long id, UserPrincipal principal) {
+        Specification<ServiceRequest> specification = idMatches(id)
+                .and(visibilityFor(principal))
+                .and(fetchAssociations());
+
+        Optional<ServiceRequest> visible = serviceRequestRepository.findOne(specification);
+        if (visible.isPresent()) {
+            return ServiceRequestMapper.toResponse(visible.get());
+        }
+
+        if (!serviceRequestRepository.existsById(id)) {
+            throw new ResourceNotFoundException("Service request", id);
+        }
+        throw new ForbiddenOperationException("You are not allowed to view this request");
+    }
+
+    private Specification<ServiceRequest> idMatches(Long id) {
+        return (root, query, cb) -> cb.equal(root.get("id"), id);
     }
 
     private Specification<ServiceRequest> visibilityFor(UserPrincipal principal) {
