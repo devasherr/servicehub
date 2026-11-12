@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: servicehub_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: servicehub
+      POSTGRES_USER: servicehub
+      POSTGRES_PASSWORD: servicehub
+    ports:
+      # Host port 5455 (5432, 5433 and 5444 are already taken by other containers)
+      - "5455:5432"
+    volumes:
+      - servicehub_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U servicehub -d servicehub"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  servicehub_pgdata:
