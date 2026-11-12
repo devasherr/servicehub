@@ -1,0 +1,4 @@
+CREATE TABLE roles (
+    id   SMALLINT PRIMARY KEY,
+    name VARCHAR(30) NOT NULL UNIQUE
+);
