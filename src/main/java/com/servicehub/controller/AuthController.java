@@ -2,9 +2,12 @@ package com.servicehub.controller;
 
 import com.servicehub.dto.auth.LoginRequest;
 import com.servicehub.dto.auth.LoginResponse;
+import com.servicehub.dto.auth.RegisterRequest;
+import com.servicehub.dto.auth.UserSummary;
 import com.servicehub.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -21,5 +24,10 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(authService.login(request));
+    }
+
+    @PostMapping("/register")
+    public ResponseEntity<UserSummary> register(@Valid @RequestBody RegisterRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(authService.register(request));
     }
 }
