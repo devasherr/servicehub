@@ -2,6 +2,7 @@ package com.servicehub.exception;
 
 import com.servicehub.dto.common.ApiError;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolationException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +15,7 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 
 @Slf4j
 @RestControllerAdvice
@@ -71,6 +73,29 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, "Malformed or missing request body", request);
     }
 
+    @ExceptionHandler({ConstraintViolationException.class, HandlerMethodValidationException.class})
+    public ResponseEntity<ApiError> handleMethodValidation(Exception ex,
+                                                           HttpServletRequest request) {
+        Map<String, String> fieldErrors = new LinkedHashMap<>();
+        if (ex instanceof ConstraintViolationException violations) {
+            violations.getConstraintViolations().forEach(violation -> fieldErrors.putIfAbsent(
+                    lastPathSegment(violation.getPropertyPath().toString()),
+                    violation.getMessage()));
+        } else if (ex instanceof HandlerMethodValidationException validationEx) {
+            validationEx.getParameterValidationResults().forEach(result ->
+                    result.getResolvableErrors().forEach(error -> fieldErrors.putIfAbsent(
+                            result.getMethodParameter().getParameterName(),
+                            error.getDefaultMessage())));
+        }
+
+        ApiError body = ApiError.of(HttpStatus.BAD_REQUEST.value(),
+                HttpStatus.BAD_REQUEST.getReasonPhrase(),
+                "Validation failed",
+                request.getRequestURI(),
+                fieldErrors);
+        return ResponseEntity.badRequest().body(body);
+    }
+
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<ApiError> handleAuthentication(AuthenticationException ex,
                                                          HttpServletRequest request) {
@@ -94,5 +119,10 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(status)
                 .body(ApiError.of(status.value(), status.getReasonPhrase(), message,
                         request.getRequestURI()));
+    }
+
+    private String lastPathSegment(String path) {
+        int lastDot = path.lastIndexOf('.');
+        return lastDot >= 0 ? path.substring(lastDot + 1) : path;
     }
 }
