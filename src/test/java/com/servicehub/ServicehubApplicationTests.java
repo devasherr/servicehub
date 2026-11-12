@@ -1,4 +1,4 @@
-package com.servicehub.servicehub;
+package com.servicehub;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;

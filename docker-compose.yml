@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_DB: servicehub
       POSTGRES_USER: servicehub
-      POSTGRES_PASSWORD: servicehub
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-servicehub}
     ports:
       # Host port 5455 (5432, 5433 and 5444 are already taken by other containers)
       - "5455:5432"
