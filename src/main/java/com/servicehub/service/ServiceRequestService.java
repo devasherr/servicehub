@@ -187,6 +187,59 @@ public class ServiceRequestService {
         return ServiceRequestMapper.toResponse(saved);
     }
 
+    @Transactional
+    public ServiceRequestResponse assign(Long id, AssignTechnicianRequest request,
+                                         UserPrincipal principal) {
+        ServiceRequest serviceRequest = serviceRequestRepository.findOne(
+                        idMatches(id).and(fetchAssociations()))
+                .orElseThrow(() -> new ResourceNotFoundException("Service request", id));
+
+        authorizeAssignment(serviceRequest, principal);
+
+        if (serviceRequest.getStatus() == RequestStatus.RESOLVED
+                || serviceRequest.getStatus() == RequestStatus.CLOSED) {
+            throw new ConflictException("A " + serviceRequest.getStatus().name()
+                    .toLowerCase(Locale.ROOT) + " request cannot be assigned");
+        }
+
+        User technician = userRepository.findById(request.technicianId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "User", request.technicianId()));
+        if (!"TECHNICIAN".equals(technician.getRole().getName())) {
+            throw new BadRequestException("Selected user is not a technician");
+        }
+        if (!technician.isActive()) {
+            throw new BadRequestException("Selected technician is not active");
+        }
+
+        RequestStatus previousStatus = serviceRequest.getStatus();
+        serviceRequest.setAssignedTo(technician);
+
+        if (previousStatus == RequestStatus.SUBMITTED || previousStatus == RequestStatus.PENDING) {
+            serviceRequest.setStatus(RequestStatus.ASSIGNED);
+            User actor = userRepository.findById(principal.getId())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "User", principal.getId()));
+            recordStatusChange(serviceRequest, previousStatus, RequestStatus.ASSIGNED, actor,
+                    "Assigned to " + technician.getFullName());
+        }
+
+        ServiceRequest saved = serviceRequestRepository.saveAndFlush(serviceRequest);
+        return ServiceRequestMapper.toResponse(saved);
+    }
+
+    private void authorizeAssignment(ServiceRequest serviceRequest, UserPrincipal principal) {
+        if ("ADMIN".equals(principal.getRole())) {
+            return;
+        }
+        if ("MANAGER".equals(principal.getRole())
+                && principal.getDepartmentId() != null
+                && principal.getDepartmentId().equals(serviceRequest.getDepartment().getId())) {
+            return;
+        }
+        throw new ForbiddenOperationException("You are not allowed to assign this request");
+    }
+
     private ServiceRequest requireVisible(Long id, UserPrincipal principal, String action) {
         Specification<ServiceRequest> specification = idMatches(id)
                 .and(visibilityFor(principal))
@@ -288,12 +341,17 @@ public class ServiceRequestService {
     }
 
     private void recordInitialStatus(ServiceRequest request, User changedBy) {
+        recordStatusChange(request, null, RequestStatus.SUBMITTED, changedBy, "Request submitted");
+    }
+
+    private void recordStatusChange(ServiceRequest request, RequestStatus fromStatus,
+                                    RequestStatus toStatus, User changedBy, String note) {
         RequestStatusHistory history = new RequestStatusHistory();
         history.setRequest(request);
-        history.setFromStatus(null);
-        history.setToStatus(RequestStatus.SUBMITTED);
+        history.setFromStatus(fromStatus);
+        history.setToStatus(toStatus);
         history.setChangedBy(changedBy);
-        history.setNote("Request submitted");
+        history.setNote(note);
         statusHistoryRepository.save(history);
     }
 

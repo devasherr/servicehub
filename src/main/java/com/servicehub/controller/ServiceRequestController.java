@@ -1,6 +1,7 @@
 package com.servicehub.controller;
 
 import com.servicehub.dto.common.PageResponse;
+import com.servicehub.dto.request.AssignTechnicianRequest;
 import com.servicehub.dto.request.CreateRequestRequest;
 import com.servicehub.dto.request.ServiceRequestResponse;
 import com.servicehub.dto.request.UpdateRequestRequest;
@@ -13,9 +14,11 @@ import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -54,6 +57,15 @@ public class ServiceRequestController {
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody UpdateRequestRequest request) {
         return ResponseEntity.ok(serviceRequestService.update(id, request, principal));
+    }
+
+    @PatchMapping("/{id}/assign")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    public ResponseEntity<ServiceRequestResponse> assign(
+            @PathVariable @Positive Long id,
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody AssignTechnicianRequest request) {
+        return ResponseEntity.ok(serviceRequestService.assign(id, request, principal));
     }
 
     @GetMapping
