@@ -1,8 +1,10 @@
 package com.servicehub.service;
 
 import com.servicehub.dto.common.PageResponse;
+import com.servicehub.dto.request.AssignTechnicianRequest;
 import com.servicehub.dto.request.CreateRequestRequest;
 import com.servicehub.dto.request.ServiceRequestResponse;
+import com.servicehub.dto.request.UpdateRequestRequest;
 import com.servicehub.entity.Department;
 import com.servicehub.entity.RequestStatusHistory;
 import com.servicehub.entity.ServiceCategory;
@@ -11,6 +13,7 @@ import com.servicehub.entity.User;
 import com.servicehub.entity.enums.Priority;
 import com.servicehub.entity.enums.RequestStatus;
 import com.servicehub.exception.BadRequestException;
+import com.servicehub.exception.ConflictException;
 import com.servicehub.exception.ForbiddenOperationException;
 import com.servicehub.exception.ResourceNotFoundException;
 import com.servicehub.mapper.ServiceRequestMapper;
@@ -150,19 +153,55 @@ public class ServiceRequestService {
 
     @Transactional(readOnly = true)
     public ServiceRequestResponse getById(Long id, UserPrincipal principal) {
+        return ServiceRequestMapper.toResponse(requireVisible(id, principal, "view"));
+    }
+
+    @Transactional
+    public ServiceRequestResponse update(Long id, UpdateRequestRequest request,
+                                         UserPrincipal principal) {
+        ServiceRequest serviceRequest = requireVisible(id, principal, "update");
+
+        if (serviceRequest.getStatus() == RequestStatus.CLOSED
+                && !"ADMIN".equals(principal.getRole())) {
+            throw new ConflictException("A closed request cannot be updated");
+        }
+
+        ServiceCategory category = serviceCategoryRepository.findById(request.categoryId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Service category", request.categoryId()));
+        if (!category.isActive()) {
+            throw new BadRequestException("Service category is not active");
+        }
+
+        serviceRequest.setTitle(request.title().trim());
+        serviceRequest.setDescription(request.description().trim());
+        serviceRequest.setCategory(category);
+        if (request.priority() != null) {
+            serviceRequest.setPriority(request.priority());
+        }
+        if (request.location() != null) {
+            serviceRequest.setLocation(trimToNull(request.location()));
+        }
+
+        ServiceRequest saved = serviceRequestRepository.saveAndFlush(serviceRequest);
+        return ServiceRequestMapper.toResponse(saved);
+    }
+
+    private ServiceRequest requireVisible(Long id, UserPrincipal principal, String action) {
         Specification<ServiceRequest> specification = idMatches(id)
                 .and(visibilityFor(principal))
                 .and(fetchAssociations());
 
         Optional<ServiceRequest> visible = serviceRequestRepository.findOne(specification);
         if (visible.isPresent()) {
-            return ServiceRequestMapper.toResponse(visible.get());
+            return visible.get();
         }
 
         if (!serviceRequestRepository.existsById(id)) {
             throw new ResourceNotFoundException("Service request", id);
         }
-        throw new ForbiddenOperationException("You are not allowed to view this request");
+        throw new ForbiddenOperationException(
+                "You are not allowed to " + action + " this request");
     }
 
     private Specification<ServiceRequest> idMatches(Long id) {
