@@ -299,6 +299,22 @@ public class ServiceRequestService {
         return RequestCommentMapper.toResponse(commentRepository.saveAndFlush(comment));
     }
 
+    @Transactional(readOnly = true)
+    public PageResponse<RequestCommentResponse> listComments(Long requestId,
+                                                              UserPrincipal principal,
+                                                              int page,
+                                                              int size) {
+        requireVisible(requestId, principal, "view comments on");
+
+        Pageable pageable = PageRequest.of(page, size,
+                Sort.by(Sort.Direction.ASC, "createdAt", "id"));
+        Page<RequestComment> comments = isStaff(principal.getRole())
+                ? commentRepository.findByRequestId(requestId, pageable)
+                : commentRepository.findByRequestIdAndInternalFalse(requestId, pageable);
+
+        return PageResponse.from(comments.map(RequestCommentMapper::toResponse));
+    }
+
     private boolean isStaff(String role) {
         return "ADMIN".equals(role) || "MANAGER".equals(role) || "TECHNICIAN".equals(role);
     }

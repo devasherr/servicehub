@@ -80,6 +80,16 @@ public class ServiceRequestController {
                 .body(serviceRequestService.addComment(id, request, principal));
     }
 
+    @GetMapping("/{id}/comments")
+    public ResponseEntity<PageResponse<RequestCommentResponse>> listComments(
+            @PathVariable @Positive Long id,
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+        return ResponseEntity.ok(
+                serviceRequestService.listComments(id, principal, page, size));
+    }
+
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'TECHNICIAN')")
     public ResponseEntity<ServiceRequestResponse> changeStatus(
