@@ -2,11 +2,14 @@ package com.servicehub.service;
 
 import com.servicehub.dto.common.PageResponse;
 import com.servicehub.dto.request.AssignTechnicianRequest;
+import com.servicehub.dto.request.CreateCommentRequest;
 import com.servicehub.dto.request.CreateRequestRequest;
+import com.servicehub.dto.request.RequestCommentResponse;
 import com.servicehub.dto.request.ServiceRequestResponse;
 import com.servicehub.dto.request.UpdateRequestRequest;
 import com.servicehub.dto.request.UpdateRequestStatusRequest;
 import com.servicehub.entity.Department;
+import com.servicehub.entity.RequestComment;
 import com.servicehub.entity.RequestStatusHistory;
 import com.servicehub.entity.ServiceCategory;
 import com.servicehub.entity.ServiceRequest;
@@ -17,8 +20,10 @@ import com.servicehub.exception.BadRequestException;
 import com.servicehub.exception.ConflictException;
 import com.servicehub.exception.ForbiddenOperationException;
 import com.servicehub.exception.ResourceNotFoundException;
+import com.servicehub.mapper.RequestCommentMapper;
 import com.servicehub.mapper.ServiceRequestMapper;
 import com.servicehub.repository.DepartmentRepository;
+import com.servicehub.repository.RequestCommentRepository;
 import com.servicehub.repository.RequestStatusHistoryRepository;
 import com.servicehub.repository.ServiceCategoryRepository;
 import com.servicehub.repository.ServiceRequestRepository;
@@ -67,6 +72,7 @@ public class ServiceRequestService {
 
     private final ServiceRequestRepository serviceRequestRepository;
     private final RequestStatusHistoryRepository statusHistoryRepository;
+    private final RequestCommentRepository commentRepository;
     private final ServiceCategoryRepository serviceCategoryRepository;
     private final DepartmentRepository departmentRepository;
     private final UserRepository userRepository;
@@ -268,6 +274,33 @@ public class ServiceRequestService {
                 trimToNull(request.note()));
 
         return ServiceRequestMapper.toResponse(saved);
+    }
+
+    @Transactional
+    public RequestCommentResponse addComment(Long requestId, CreateCommentRequest request,
+                                             UserPrincipal principal) {
+        ServiceRequest serviceRequest = requireVisible(requestId, principal, "comment on");
+        boolean internal = Boolean.TRUE.equals(request.internal());
+
+        if (internal && !isStaff(principal.getRole())) {
+            throw new ForbiddenOperationException(
+                    "You are not allowed to add internal notes");
+        }
+
+        User author = userRepository.findById(principal.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("User", principal.getId()));
+
+        RequestComment comment = new RequestComment();
+        comment.setRequest(serviceRequest);
+        comment.setAuthor(author);
+        comment.setContent(request.content().trim());
+        comment.setInternal(internal);
+
+        return RequestCommentMapper.toResponse(commentRepository.saveAndFlush(comment));
+    }
+
+    private boolean isStaff(String role) {
+        return "ADMIN".equals(role) || "MANAGER".equals(role) || "TECHNICIAN".equals(role);
     }
 
     private void authorizeAssignment(ServiceRequest serviceRequest, UserPrincipal principal) {

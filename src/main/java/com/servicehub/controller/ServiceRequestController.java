@@ -2,7 +2,9 @@ package com.servicehub.controller;
 
 import com.servicehub.dto.common.PageResponse;
 import com.servicehub.dto.request.AssignTechnicianRequest;
+import com.servicehub.dto.request.CreateCommentRequest;
 import com.servicehub.dto.request.CreateRequestRequest;
+import com.servicehub.dto.request.RequestCommentResponse;
 import com.servicehub.dto.request.ServiceRequestResponse;
 import com.servicehub.dto.request.UpdateRequestRequest;
 import com.servicehub.dto.request.UpdateRequestStatusRequest;
@@ -67,6 +69,15 @@ public class ServiceRequestController {
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody AssignTechnicianRequest request) {
         return ResponseEntity.ok(serviceRequestService.assign(id, request, principal));
+    }
+
+    @PostMapping("/{id}/comments")
+    public ResponseEntity<RequestCommentResponse> addComment(
+            @PathVariable @Positive Long id,
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody CreateCommentRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(serviceRequestService.addComment(id, request, principal));
     }
 
     @PatchMapping("/{id}/status")
