@@ -5,6 +5,7 @@ import com.servicehub.dto.request.AssignTechnicianRequest;
 import com.servicehub.dto.request.CreateRequestRequest;
 import com.servicehub.dto.request.ServiceRequestResponse;
 import com.servicehub.dto.request.UpdateRequestRequest;
+import com.servicehub.dto.request.UpdateRequestStatusRequest;
 import com.servicehub.entity.Department;
 import com.servicehub.entity.RequestStatusHistory;
 import com.servicehub.entity.ServiceCategory;
@@ -25,12 +26,14 @@ import com.servicehub.repository.UserRepository;
 import com.servicehub.security.UserPrincipal;
 import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
+import java.time.Instant;
 import java.time.Year;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -55,6 +58,12 @@ public class ServiceRequestService {
             Map.entry("updatedAt", "updatedAt"),
             Map.entry("resolvedAt", "resolvedAt"),
             Map.entry("closedAt", "closedAt"));
+
+    private static final Map<RequestStatus, Set<RequestStatus>> ALLOWED_TRANSITIONS = Map.of(
+            RequestStatus.SUBMITTED, Set.of(RequestStatus.PENDING),
+            RequestStatus.ASSIGNED, Set.of(RequestStatus.IN_PROGRESS),
+            RequestStatus.IN_PROGRESS, Set.of(RequestStatus.RESOLVED),
+            RequestStatus.RESOLVED, Set.of(RequestStatus.CLOSED));
 
     private final ServiceRequestRepository serviceRequestRepository;
     private final RequestStatusHistoryRepository statusHistoryRepository;
@@ -228,6 +237,39 @@ public class ServiceRequestService {
         return ServiceRequestMapper.toResponse(saved);
     }
 
+    @Transactional
+    public ServiceRequestResponse changeStatus(Long id, UpdateRequestStatusRequest request,
+                                               UserPrincipal principal) {
+        ServiceRequest serviceRequest = serviceRequestRepository.findOne(
+                        idMatches(id).and(fetchAssociations()))
+                .orElseThrow(() -> new ResourceNotFoundException("Service request", id));
+
+        RequestStatus previousStatus = serviceRequest.getStatus();
+        RequestStatus newStatus = request.status();
+        authorizeStatusChange(serviceRequest, newStatus, principal);
+        validateTransition(previousStatus, newStatus);
+
+        User actor = userRepository.findById(principal.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("User", principal.getId()));
+
+        Instant now = Instant.now();
+        serviceRequest.setStatus(newStatus);
+        if (newStatus == RequestStatus.RESOLVED) {
+            serviceRequest.setResolvedAt(now);
+        } else if (newStatus == RequestStatus.CLOSED) {
+            if (serviceRequest.getResolvedAt() == null) {
+                serviceRequest.setResolvedAt(now);
+            }
+            serviceRequest.setClosedAt(now);
+        }
+
+        ServiceRequest saved = serviceRequestRepository.saveAndFlush(serviceRequest);
+        recordStatusChange(saved, previousStatus, newStatus, actor,
+                trimToNull(request.note()));
+
+        return ServiceRequestMapper.toResponse(saved);
+    }
+
     private void authorizeAssignment(ServiceRequest serviceRequest, UserPrincipal principal) {
         if ("ADMIN".equals(principal.getRole())) {
             return;
@@ -238,6 +280,53 @@ public class ServiceRequestService {
             return;
         }
         throw new ForbiddenOperationException("You are not allowed to assign this request");
+    }
+
+    private void authorizeStatusChange(ServiceRequest serviceRequest, RequestStatus newStatus,
+                                       UserPrincipal principal) {
+        String role = principal.getRole();
+
+        if ("ADMIN".equals(role)) {
+            return;
+        }
+        if ("TECHNICIAN".equals(role)) {
+            if (serviceRequest.getAssignedTo() == null
+                    || !serviceRequest.getAssignedTo().getId().equals(principal.getId())) {
+                throw new ForbiddenOperationException(
+                        "You can only change the status of requests assigned to you");
+            }
+            if (newStatus != RequestStatus.IN_PROGRESS && newStatus != RequestStatus.RESOLVED) {
+                throw new ForbiddenOperationException(
+                        "Technicians can only start or resolve assigned requests");
+            }
+            return;
+        }
+        if ("MANAGER".equals(role)) {
+            if (principal.getDepartmentId() == null
+                    || !principal.getDepartmentId()
+                            .equals(serviceRequest.getDepartment().getId())) {
+                throw new ForbiddenOperationException(
+                        "You can only change the status of requests in your department");
+            }
+            if (newStatus != RequestStatus.CLOSED) {
+                throw new ForbiddenOperationException(
+                        "Managers can only approve resolved requests");
+            }
+            return;
+        }
+        throw new ForbiddenOperationException(
+                "You are not allowed to change the status of this request");
+    }
+
+    private void validateTransition(RequestStatus fromStatus, RequestStatus toStatus) {
+        if (toStatus == RequestStatus.ASSIGNED) {
+            throw new ConflictException(
+                    "Use the assignment endpoint to assign a technician");
+        }
+        if (!ALLOWED_TRANSITIONS.getOrDefault(fromStatus, Set.of()).contains(toStatus)) {
+            throw new ConflictException("Cannot change status from " + fromStatus
+                    + " to " + toStatus);
+        }
     }
 
     private ServiceRequest requireVisible(Long id, UserPrincipal principal, String action) {

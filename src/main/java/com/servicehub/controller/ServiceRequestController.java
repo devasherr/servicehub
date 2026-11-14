@@ -5,6 +5,7 @@ import com.servicehub.dto.request.AssignTechnicianRequest;
 import com.servicehub.dto.request.CreateRequestRequest;
 import com.servicehub.dto.request.ServiceRequestResponse;
 import com.servicehub.dto.request.UpdateRequestRequest;
+import com.servicehub.dto.request.UpdateRequestStatusRequest;
 import com.servicehub.security.UserPrincipal;
 import com.servicehub.service.ServiceRequestService;
 import jakarta.validation.Valid;
@@ -66,6 +67,15 @@ public class ServiceRequestController {
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody AssignTechnicianRequest request) {
         return ResponseEntity.ok(serviceRequestService.assign(id, request, principal));
+    }
+
+    @PatchMapping("/{id}/status")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'TECHNICIAN')")
+    public ResponseEntity<ServiceRequestResponse> changeStatus(
+            @PathVariable @Positive Long id,
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody UpdateRequestStatusRequest request) {
+        return ResponseEntity.ok(serviceRequestService.changeStatus(id, request, principal));
     }
 
     @GetMapping
