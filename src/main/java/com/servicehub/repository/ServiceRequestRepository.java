@@ -12,4 +12,6 @@ public interface ServiceRequestRepository extends JpaRepository<ServiceRequest, 
     Long nextReferenceSequence();
 
     boolean existsByCategoryId(Long categoryId);
+
+    boolean existsByDepartmentId(Long departmentId);
 }
