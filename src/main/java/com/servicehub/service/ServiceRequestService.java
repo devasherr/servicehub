@@ -5,6 +5,7 @@ import com.servicehub.dto.request.AssignTechnicianRequest;
 import com.servicehub.dto.request.CreateCommentRequest;
 import com.servicehub.dto.request.CreateRequestRequest;
 import com.servicehub.dto.request.RequestCommentResponse;
+import com.servicehub.dto.request.RequestStatusCountResponse;
 import com.servicehub.dto.request.ServiceRequestResponse;
 import com.servicehub.dto.request.UpdateRequestRequest;
 import com.servicehub.dto.request.UpdateRequestStatusRequest;
@@ -32,8 +33,11 @@ import com.servicehub.security.UserPrincipal;
 import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.Year;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -164,6 +168,62 @@ public class ServiceRequestService {
                 serviceRequestRepository.findAll(specification, pageable);
 
         return PageResponse.from(requests.map(ServiceRequestMapper::toResponse));
+    }
+
+    @Transactional(readOnly = true)
+    public RequestStatusCountResponse getStatusCounts(
+            UserPrincipal principal,
+            String search,
+            String priority,
+            Long categoryId,
+            Long departmentId,
+            Long assignedToId,
+            LocalDate dateFrom,
+            LocalDate dateTo) {
+
+        if (dateFrom != null && dateTo != null && dateFrom.isAfter(dateTo)) {
+            throw new BadRequestException("dateFrom must not be after dateTo");
+        }
+
+        Priority priorityFilter = parsePriority(priority);
+        String normalizedSearch = search == null || search.isBlank() ? null : search.trim();
+
+        Specification<ServiceRequest> specification = visibilityFor(principal);
+        if (normalizedSearch != null) {
+            specification = specification.and(searchMatches(normalizedSearch));
+        }
+        if (priorityFilter != null) {
+            Priority value = priorityFilter;
+            specification = specification.and(
+                    (root, query, cb) -> cb.equal(root.get("priority"), value));
+        }
+        if (categoryId != null) {
+            specification = specification.and(
+                    (root, query, cb) -> cb.equal(root.get("category").get("id"), categoryId));
+        }
+        if (departmentId != null) {
+            specification = specification.and(
+                    (root, query, cb) -> cb.equal(root.get("department").get("id"), departmentId));
+        }
+        if (assignedToId != null) {
+            specification = specification.and(
+                    (root, query, cb) -> cb.equal(root.get("assignedTo").get("id"), assignedToId));
+        }
+        if (dateFrom != null || dateTo != null) {
+            specification = specification.and(dateRange(dateFrom, dateTo));
+        }
+
+        List<ServiceRequest> requests = serviceRequestRepository.findAll(specification);
+
+        Map<RequestStatus, Long> counts = new EnumMap<>(RequestStatus.class);
+        for (RequestStatus status : RequestStatus.values()) {
+            counts.put(status, 0L);
+        }
+        for (ServiceRequest request : requests) {
+            counts.merge(request.getStatus(), 1L, Long::sum);
+        }
+
+        return RequestStatusCountResponse.of(counts);
     }
 
     @Transactional(readOnly = true)
@@ -426,6 +486,24 @@ public class ServiceRequestService {
             matches.add(cb.like(cb.lower(root.get("description")), pattern));
             matches.add(cb.like(cb.lower(root.get("referenceNumber")), pattern));
             return cb.or(matches.toArray(new Predicate[0]));
+        };
+    }
+
+    private Specification<ServiceRequest> dateRange(LocalDate dateFrom, LocalDate dateTo) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (dateFrom != null) {
+                Instant from = dateFrom.atStartOfDay(ZoneOffset.UTC).toInstant();
+                predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), from));
+            }
+            if (dateTo != null) {
+                Instant toExclusive = dateTo.plusDays(1)
+                        .atStartOfDay(ZoneOffset.UTC).toInstant();
+                predicates.add(cb.lessThan(root.get("createdAt"), toExclusive));
+            }
+            return predicates.isEmpty()
+                    ? cb.conjunction()
+                    : cb.and(predicates.toArray(new Predicate[0]));
         };
     }
 

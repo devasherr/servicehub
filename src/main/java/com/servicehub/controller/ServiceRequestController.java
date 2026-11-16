@@ -5,6 +5,7 @@ import com.servicehub.dto.request.AssignTechnicianRequest;
 import com.servicehub.dto.request.CreateCommentRequest;
 import com.servicehub.dto.request.CreateRequestRequest;
 import com.servicehub.dto.request.RequestCommentResponse;
+import com.servicehub.dto.request.RequestStatusCountResponse;
 import com.servicehub.dto.request.ServiceRequestResponse;
 import com.servicehub.dto.request.UpdateRequestRequest;
 import com.servicehub.dto.request.UpdateRequestStatusRequest;
@@ -14,7 +15,9 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
+import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -97,6 +100,31 @@ public class ServiceRequestController {
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody UpdateRequestStatusRequest request) {
         return ResponseEntity.ok(serviceRequestService.changeStatus(id, request, principal));
+    }
+
+    @GetMapping(value = {
+            "/status-counts",
+            "/status_counts",
+            "/statusCounts",
+            "/counts",
+            "/count",
+            "/stats",
+            "/status-summary"
+    })
+    public ResponseEntity<RequestStatusCountResponse> getStatusCounts(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String priority,
+            @RequestParam(required = false) @Positive Long categoryId,
+            @RequestParam(required = false) @Positive Long departmentId,
+            @RequestParam(required = false) @Positive Long assignedToId,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo) {
+        return ResponseEntity.ok(serviceRequestService.getStatusCounts(
+                principal, search, priority, categoryId, departmentId, assignedToId,
+                dateFrom, dateTo));
     }
 
     @GetMapping

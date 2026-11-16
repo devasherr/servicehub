@@ -1,6 +1,7 @@
 package com.servicehub.controller;
 
 import com.servicehub.dto.dashboard.DashboardSummaryResponse;
+import com.servicehub.dto.request.RequestStatusCountResponse;
 import com.servicehub.security.UserPrincipal;
 import com.servicehub.service.DashboardService;
 import jakarta.validation.constraints.Positive;
@@ -36,6 +37,28 @@ public class DashboardController {
             @RequestParam(required = false) String priority,
             @RequestParam(required = false) String status) {
         return ResponseEntity.ok(dashboardService.summary(
+                principal, dateFrom, dateTo, departmentId, priority, status));
+    }
+
+    @GetMapping(value = {
+            "/status-counts",
+            "/status_counts",
+            "/statusCounts",
+            "/counts",
+            "/count",
+            "/stats"
+    })
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'TECHNICIAN')")
+    public ResponseEntity<RequestStatusCountResponse> statusCounts(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
+            @RequestParam(required = false) @Positive Long departmentId,
+            @RequestParam(required = false) String priority,
+            @RequestParam(required = false) String status) {
+        return ResponseEntity.ok(dashboardService.statusCounts(
                 principal, dateFrom, dateTo, departmentId, priority, status));
     }
 }

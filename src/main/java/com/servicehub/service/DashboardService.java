@@ -3,6 +3,7 @@ package com.servicehub.service;
 import com.servicehub.dto.dashboard.DashboardSummaryResponse;
 import com.servicehub.dto.dashboard.DashboardSummaryResponse.CategoryBreakdown;
 import com.servicehub.dto.dashboard.DashboardSummaryResponse.TechnicianWorkload;
+import com.servicehub.dto.request.RequestStatusCountResponse;
 import com.servicehub.entity.ServiceRequest;
 import com.servicehub.entity.User;
 import com.servicehub.entity.enums.Priority;
@@ -163,6 +164,52 @@ public class DashboardService {
                 byCategory,
                 workload,
                 averageResolutionTimeHours);
+    }
+
+    @Transactional(readOnly = true)
+    public RequestStatusCountResponse statusCounts(UserPrincipal principal,
+                                                  LocalDate dateFrom,
+                                                  LocalDate dateTo,
+                                                  Long departmentId,
+                                                  String priority,
+                                                  String status) {
+        if (dateFrom != null && dateTo != null && dateFrom.isAfter(dateTo)) {
+            throw new BadRequestException("dateFrom must not be after dateTo");
+        }
+
+        Priority priorityFilter = parsePriority(priority);
+        RequestStatus statusFilter = parseStatus(status);
+
+        Specification<ServiceRequest> specification = reportScopeFor(principal)
+                .and(dateRange(dateFrom, dateTo));
+
+        if (departmentId != null) {
+            specification = specification.and(
+                    (root, query, cb) -> cb.equal(root.get("department").get("id"),
+                            departmentId));
+        }
+        if (priorityFilter != null) {
+            Priority value = priorityFilter;
+            specification = specification.and(
+                    (root, query, cb) -> cb.equal(root.get("priority"), value));
+        }
+        if (statusFilter != null) {
+            RequestStatus value = statusFilter;
+            specification = specification.and(
+                    (root, query, cb) -> cb.equal(root.get("status"), value));
+        }
+
+        List<ServiceRequest> requests = serviceRequestRepository.findAll(specification);
+
+        Map<RequestStatus, Long> byStatus = new EnumMap<>(RequestStatus.class);
+        for (RequestStatus value : RequestStatus.values()) {
+            byStatus.put(value, 0L);
+        }
+        for (ServiceRequest request : requests) {
+            byStatus.merge(request.getStatus(), 1L, Long::sum);
+        }
+
+        return RequestStatusCountResponse.of(byStatus);
     }
 
     private Specification<ServiceRequest> reportScopeFor(UserPrincipal principal) {
