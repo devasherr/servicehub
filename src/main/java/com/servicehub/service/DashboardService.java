@@ -272,7 +272,7 @@ public class DashboardService {
             return null;
         }
         try {
-            return RequestStatus.valueOf(status.trim().toUpperCase(Locale.ROOT));
+            return RequestStatus.fromString(status);
         } catch (IllegalArgumentException ex) {
             throw new BadRequestException("Invalid status: " + status);
         }

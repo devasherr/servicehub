@@ -102,6 +102,15 @@ public class ServiceRequestController {
         return ResponseEntity.ok(serviceRequestService.changeStatus(id, request, principal));
     }
 
+    @PutMapping("/{id}/status")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'TECHNICIAN')")
+    public ResponseEntity<ServiceRequestResponse> changeStatusPut(
+            @PathVariable @Positive Long id,
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody UpdateRequestStatusRequest request) {
+        return ResponseEntity.ok(serviceRequestService.changeStatus(id, request, principal));
+    }
+
     @GetMapping(value = {
             "/status-counts",
             "/status_counts",

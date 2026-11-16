@@ -337,6 +337,32 @@ public class ServiceRequestService {
     }
 
     @Transactional
+    public ServiceRequestResponse updateTechnicianTaskStatus(Long id,
+                                                            UpdateRequestStatusRequest request,
+                                                            UserPrincipal principal) {
+        ServiceRequest serviceRequest = serviceRequestRepository.findOne(
+                        idMatches(id).and(fetchAssociations()))
+                .orElseThrow(() -> new ResourceNotFoundException("Service request", id));
+
+        if (!"ADMIN".equals(principal.getRole())) {
+            if (!"TECHNICIAN".equals(principal.getRole())) {
+                throw new ForbiddenOperationException("Only technicians can update assigned task status");
+            }
+            if (serviceRequest.getAssignedTo() == null
+                    || !serviceRequest.getAssignedTo().getId().equals(principal.getId())) {
+                throw new ForbiddenOperationException("You can only change the status of requests assigned to you");
+            }
+        }
+
+        RequestStatus newStatus = request.status();
+        if (newStatus != RequestStatus.IN_PROGRESS && newStatus != RequestStatus.RESOLVED) {
+            throw new BadRequestException("Technicians can only update status to IN_PROGRESS or RESOLVED/COMPLETED");
+        }
+
+        return changeStatus(id, request, principal);
+    }
+
+    @Transactional
     public RequestCommentResponse addComment(Long requestId, CreateCommentRequest request,
                                              UserPrincipal principal) {
         ServiceRequest serviceRequest = requireVisible(requestId, principal, "comment on");
@@ -525,7 +551,7 @@ public class ServiceRequestService {
             return null;
         }
         try {
-            return RequestStatus.valueOf(status.trim().toUpperCase(Locale.ROOT));
+            return RequestStatus.fromString(status);
         } catch (IllegalArgumentException ex) {
             throw new BadRequestException("Invalid status: " + status);
         }
