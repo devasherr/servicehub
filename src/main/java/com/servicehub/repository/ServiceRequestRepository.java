@@ -10,4 +10,6 @@ public interface ServiceRequestRepository extends JpaRepository<ServiceRequest, 
 
     @Query(value = "SELECT nextval('service_request_ref_seq')", nativeQuery = true)
     Long nextReferenceSequence();
+
+    boolean existsByCategoryId(Long categoryId);
 }
