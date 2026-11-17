@@ -1,9 +1,11 @@
 package com.servicehub.controller;
 
 import com.servicehub.dto.common.PageResponse;
+import com.servicehub.dto.user.UpdateProfileRequest;
 import com.servicehub.dto.user.UserProfileResponse;
 import com.servicehub.security.UserPrincipal;
 import com.servicehub.service.UserService;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +14,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -28,6 +32,17 @@ public class UserController {
     public ResponseEntity<UserProfileResponse> me(
             @AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.ok(userService.getProfile(principal.getId()));
+    }
+
+    /**
+     * Updates the authenticated user's own profile. The user id always comes from the
+     * principal, never from the request body, so a user cannot edit someone else's profile.
+     */
+    @PatchMapping("/me")
+    public ResponseEntity<UserProfileResponse> updateMe(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody UpdateProfileRequest request) {
+        return ResponseEntity.ok(userService.updateProfile(principal.getId(), request));
     }
 
     @GetMapping

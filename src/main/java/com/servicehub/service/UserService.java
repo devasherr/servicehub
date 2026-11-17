@@ -1,8 +1,10 @@
 package com.servicehub.service;
 
 import com.servicehub.dto.common.PageResponse;
+import com.servicehub.dto.user.UpdateProfileRequest;
 import com.servicehub.dto.user.UserProfileResponse;
 import com.servicehub.entity.User;
+import com.servicehub.exception.BadRequestException;
 import com.servicehub.exception.ResourceNotFoundException;
 import com.servicehub.mapper.UserMapper;
 import com.servicehub.repository.UserRepository;
@@ -38,6 +40,31 @@ public class UserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", userId));
         return UserMapper.toProfile(user);
+    }
+
+    /**
+     * Updates the profile of the given user. Callers must pass the authenticated user's id
+     * so that one user can never modify another user's profile.
+     */
+    @Transactional
+    public UserProfileResponse updateProfile(Long userId, UpdateProfileRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", userId));
+
+        if (request.fullName() != null) {
+            String fullName = request.fullName().trim();
+            if (fullName.isEmpty()) {
+                throw new BadRequestException("Full name must not be blank");
+            }
+            user.setFullName(fullName);
+        }
+
+        if (request.phone() != null) {
+            String phone = request.phone().trim();
+            user.setPhone(phone.isEmpty() ? null : phone);
+        }
+
+        return UserMapper.toProfile(userRepository.saveAndFlush(user));
     }
 
     @Transactional(readOnly = true)
